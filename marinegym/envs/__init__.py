@@ -1,2 +1,2 @@
-from .single import Hover, Track
+from .single import Hover, Track, SearchAndRescue
 from .isaac_env import IsaacEnv

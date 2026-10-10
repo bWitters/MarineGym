@@ -1,0 +1,3 @@
+[submodule "external/neural_slam"]
+	path = external/neural_slam
+	url = https://github.com/devendrachaplot/Neural-SLAM.git

@@ -142,6 +142,12 @@ class Camera:
                     img_tensor = img_tensor.unsqueeze(0)
                 else:
                     img_tensor = img_tensor.permute(2, 0, 1)
+                # Normalize depth to [0, 1] range based on clipping range
+                if k == "distance_to_image_plane":
+                    # Get clipping range from config
+                    near, far = self.cfg.usd_params.clipping_range
+                    img_tensor = (img_tensor - near) / (far - near)
+                    img_tensor = img_tensor.clamp(0, 1)
                 images_dict[k] = img_tensor
             images_list.append(TensorDict(images_dict, []))
         return torch.stack(images_list)

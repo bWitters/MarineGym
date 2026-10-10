@@ -3,11 +3,13 @@ import torch.distributions as D
 
 import omni.isaac.core.utils.prims as prim_utils
 
+from marinegym.slam.neural_slam import NeuralSLAMWrapper
 from marinegym.envs.isaac_env import AgentSpec, IsaacEnv
 from marinegym.views import ArticulationView, RigidPrimView
 from marinegym.utils.torch import euler_to_quaternion, quat_axis
 from marinegym.sensors.camera import Camera
 from marinegym.sensors.config import PinholeCameraCfg
+from marinegym.slam.frontier_exploration import FrontierExploration
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, DiscreteTensorSpec
@@ -85,6 +87,21 @@ class Hover(IsaacEnv):
         self.target_heading = torch.zeros(self.num_envs, 1, 3, device=self.device)
         self.alpha = 0.8
 
+        self.slam = NeuralSLAMWrapper(
+            map_size=(100, 100),  # 10m x 10m map
+            resolution=0.1,       # 10cm per cell
+            device=self.device
+        )
+
+        self.exploration = FrontierExploration(
+            self.slam,
+            drone_radius=0.5,
+            device=self.device
+        )
+        self.prev_map_coverage = 0.0
+
+
+
     def _design_scene(self):
         import marinegym.utils.kit as kit_utils
         import omni.isaac.core.utils.prims as prim_utils
@@ -159,7 +176,27 @@ class Hover(IsaacEnv):
                     device=self.device,
                     dtype=torch.float32,
                 ),
+                "camera_depth": UnboundedContinuousTensorSpec(
+                    (1, 1, height, width),  # Depth is single channel
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
                 "intrinsics": self.drone.intrinsics_spec.unsqueeze(0).to(self.device),
+                "slam_map": UnboundedContinuousTensorSpec(
+                    (1, 32, 100, 100),  # [1, channels, height, width]
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
+                "slam_pose": UnboundedContinuousTensorSpec(
+                    (1, 3),  # [x, y, theta]
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
+                "exploration_goal": UnboundedContinuousTensorSpec(
+                    (1, 2),  # [x, y] goal position
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
             })
         }).expand(self.num_envs).to(self.device)
         self.action_spec = CompositeSpec({
@@ -193,6 +230,7 @@ class Hover(IsaacEnv):
         self.stats = stats_spec.zero()
 
     def _reset_idx(self, env_ids: torch.Tensor):
+        self.slam.reset(len(env_ids))
         if self.enable_flow:
             self.drone.set_flow_velocities(env_ids, self.max_flow_velocity, self.flow_velocity_gaussian_noise)
         self.drone._reset_idx(env_ids, self.training)
@@ -245,27 +283,55 @@ class Hover(IsaacEnv):
 
         images = self.camera.get_images()
         rgb = images["rgb"]
+        depth = images["distance_to_image_plane"]
+
         # Replicator commonly returns RGBA. Keep RGB only.
         rgb = rgb[:, :3]
         rgb = rgb.to(dtype=torch.float32).div_(255.0)
         # Shape: [num_envs, one_agent, 3, height, width]
         rgb = rgb.unsqueeze(1)
-        expected = (
+        depth = depth.unsqueeze(1)
+
+        expected_rgb = (
             self.num_envs, 1, 3,
             self.cfg.task.camera.resolution[1],
             self.cfg.task.camera.resolution[0],
         )
-        if tuple(rgb.shape) != expected:
-            raise RuntimeError(
-                f"Unexpected RGB shape {tuple(rgb.shape)}; expected {expected}"
-            )
+        expected_depth = (
+            self.num_envs, 1, 1,
+            self.cfg.task.camera.resolution[1],
+            self.cfg.task.camera.resolution[0],
+        )
+
+        if tuple(rgb.shape) != expected_rgb:
+            raise RuntimeError(f"Unexpected RGB shape {tuple(rgb.shape)}; expected {expected_rgb}")
+
+        if tuple(depth.shape) != expected_depth:
+            raise RuntimeError(f"Unexpected depth shape {tuple(depth.shape)}; expected {expected_depth}")
+
+        slam_output = self.slam.process_frame(
+            rgb.unsqueeze(0),  # Add batch dim
+            depth.unsqueeze(0),
+            self.drone_state.unsqueeze(0),
+            self.drone.intrinsics.unsqueeze(0)
+        )
+
+        goal = self.exploration.get_exploration_goal(
+            self.drone_state[..., :2]  # x, y position
+        ).unsqueeze(0).unsqueeze(0)  # [1, 1, 2]
+
+
 
         return TensorDict(
             {
                 "agents": {
                     "observation": obs,
                     "camera_rgb": rgb,
+                    "camera_depth": depth,
                     "intrinsics": self.drone.intrinsics,
+                    "slam_map": slam_output["slam_map"],
+                    "slam_pose": slam_output["slam_pose"],
+                    "exploration_goal": goal,
                 },
                 "stats": self.stats.clone(),
             },
@@ -282,6 +348,11 @@ class Hover(IsaacEnv):
         reward_pose = 0.5 * 1.0 / (1.0 + torch.square(self.reward_distance_scale * distance))
         # uprightness
         reward_up = torch.square((self.drone.up[..., 2] + 1) / 2)
+        exploration_reward, self.prev_map_coverage = self.exploration.compute_exploration_reward(
+            self.drone_state[..., :2],
+            self.prev_map_coverage
+        )
+
 
         # spin reward
         spinnage = torch.square(self.drone.vel[..., -1])
@@ -298,6 +369,7 @@ class Hover(IsaacEnv):
             + reward_effort
             + reward_action_smoothness
         )
+        reward = reward + exploration_reward * 2.0
 
         misbehave = (self.drone.pos[..., 2] < 0.2) | (distance > 4)
         hasnan = torch.isnan(self.drone_state).any(-1)

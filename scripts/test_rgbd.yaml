@@ -1,0 +1,20 @@
+# Minimal config for RGBD testing - no algo needed
+hydra:
+  searchpath:
+    # see https://hydra.cc/docs/advanced/search_path/
+    - file://../cfg
+
+headless: false
+enable_livestream: false
+mode: train
+
+sim: ${task.sim}
+env: ${task.env}
+
+defaults:
+  - task: Hover
+
+viewer:
+  resolution: [960, 720]
+  eye: [2., 2., 2.]
+  lookat: [0., 0., 1.]

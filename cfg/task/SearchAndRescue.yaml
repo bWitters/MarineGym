@@ -1,0 +1,48 @@
+name: SearchAndRescue
+
+defaults:
+  - /base/env_base@_here_
+  - /base/sim_base@_here_
+  - randomization@_here_
+  - disturbances@_here_
+
+env:
+  num_envs: 1
+  env_spacing: 10
+  max_episode_length: 1000
+
+drone_model:
+  name: BlueROV
+  controller: LeePositionController
+
+force_sensor: false
+time_encoding: true
+
+# Exploration parameters
+exploration:
+  enabled: true
+  drone_radius: 0.5
+  frontier_threshold: 0.5
+  max_frontiers: 10
+
+# SLAM parameters
+slam:
+  enabled: true
+  map_size: [200, 200]  # 20m x 20m for larger exploration
+  resolution: 0.1
+  n_channels: 32
+
+# Camera
+camera:
+  enabled: true
+  resolution: [84, 84]
+  data_types: [rgb, distance_to_image_plane]
+  translation: [0.20, 0.0, 0.03]
+  target: [1.0, 0.0, 0.03]
+  focal_length: 24.0
+  horizontal_aperture: 20.955
+  clipping_range: [0.1, 20.0]
+
+reward_effort_weight: 0.1
+reward_action_smoothness_weight: 0.0
+reward_distance_scale: 1.2

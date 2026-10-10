@@ -65,7 +65,7 @@ class PinholeCameraCfg:
 
     sensor_tick: float = 0.0
     """Simulation seconds between sensor buffers. Defaults to 0.0."""
-    data_types: List[str] = field(default_factory=lambda: ["rgb"])
+    data_types: List[str] = field(default_factory=lambda: ["rgb", "distance_to_image_plane"])
     """List of sensor names/types to enable for the camera. Defaults to ["rgb"]."""
     resolution: Tuple[int, int] = (640, 480)
     """Image resolution."""
