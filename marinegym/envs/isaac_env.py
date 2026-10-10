@@ -264,7 +264,11 @@ class IsaacEnv(EnvBase):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for substep in range(self.substeps):
             self._pre_sim_step(tensordict)
-            self.sim.step(self._should_render(substep))
+            camera_cfg = self.cfg.task.get("camera", None)
+            camera_enabled = bool(
+                camera_cfg is not None and camera_cfg.get("enabled", False)
+            )
+            self.sim.step(self._should_render(substep) or camera_enabled)
         self._post_sim_step(tensordict)
         self.progress_buf += 1
         tensordict = TensorDict({}, self.batch_size, device=self.device)

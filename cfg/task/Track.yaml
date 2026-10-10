@@ -11,8 +11,8 @@ env:
   max_episode_length: 600
 
 drone_model:
-  name: iAUV
-  controller: null
+  name: BlueROV
+  controller: LeePositionController
 force_sensor: false
 time_encoding: true
 intrinsics: false

@@ -8,7 +8,7 @@ defaults:
   - disturbances@_here_ # Include the disturbance settings
 
 env:
-  num_envs: 64
+  num_envs: 1
   env_spacing: 6
   max_episode_length: 200
 
@@ -23,3 +23,14 @@ reward_action_smoothness_weight: 0.0
 reward_distance_scale: 1.2
 
 action_transform: null
+
+camera:
+  enabled: true
+  resolution: [84, 84] # [width, height]
+  data_types: [rgb]
+  translation: [0.20, 0.0, 0.03]
+  target: [1.0, 0.0, 0.03] # local +X is the expected forward direction
+  focal_length: 24.0
+  horizontal_aperture: 20.955
+  clipping_range: [0.1, 20.0]
+  decimation: 1

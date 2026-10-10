@@ -6,6 +6,8 @@ import omni.isaac.core.utils.prims as prim_utils
 from marinegym.envs.isaac_env import AgentSpec, IsaacEnv
 from marinegym.views import ArticulationView, RigidPrimView
 from marinegym.utils.torch import euler_to_quaternion, quat_axis
+from marinegym.sensors.camera import Camera
+from marinegym.sensors.config import PinholeCameraCfg
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, DiscreteTensorSpec
@@ -30,6 +32,17 @@ class Hover(IsaacEnv):
         super().__init__(cfg, headless)
 
         self.drone.initialize()
+        if self.cfg.task.camera.enabled:
+            self.camera.initialize(
+                prim_paths_expr=(
+                    f"/World/envs/env_.*/{self.drone.name}_0/"
+                    "base_link/Camera_0"
+                )
+            )
+            if self.camera.count != self.num_envs:
+                raise RuntimeError(
+                    f"Expected {self.num_envs} cameras, found {self.camera.count}"
+                )
         if self.enable_payload:
             payload_cfg = self.disturbances[self.mode]['payload']
             self.payload_z_dist = D.Uniform(
@@ -101,6 +114,28 @@ class Hover(IsaacEnv):
         )
 
         drone_prim = self.drone.spawn(translations=[(0.0, 0.0, 2.)])[0]
+        if self.cfg.task.camera.enabled:
+            cam = self.cfg.task.camera
+            self.camera = Camera(
+                PinholeCameraCfg(
+                    sensor_tick=0.0,
+                    resolution=tuple(cam.resolution),
+                    data_types=list(cam.data_types),
+                    usd_params=PinholeCameraCfg.UsdCameraCfg(
+                        focal_length=float(cam.focal_length),
+                        horizontal_aperture=float(cam.horizontal_aperture),
+                        clipping_range=tuple(cam.clipping_range),
+                    ),
+                )
+            )
+            camera_path = (
+                f"{drone_prim.GetPath().pathString}/base_link/Camera_0"
+            )
+            self.camera.spawn(
+                prim_paths=[camera_path],
+                translations=[list(cam.translation)],
+                targets=[list(cam.target)],
+            )
         if self.enable_payload:
             attach_payload(drone_prim.GetPath().pathString)
         return ["/World/defaultGroundPlane"]
@@ -108,15 +143,23 @@ class Hover(IsaacEnv):
     def _set_specs(self):
         drone_state_dim = self.drone.state_spec.shape[-1]
         observation_dim = drone_state_dim + 3
+        width, height = self.cfg.task.camera.resolution
 
         if self.cfg.task.time_encoding:
             self.time_encoding_dim = 4
             observation_dim += self.time_encoding_dim
-
+ 
         self.observation_spec = CompositeSpec({
             "agents": CompositeSpec({
-                "observation": UnboundedContinuousTensorSpec((1, observation_dim), device=self.device),
-                "intrinsics": self.drone.intrinsics_spec.unsqueeze(0).to(self.device)
+                "observation": UnboundedContinuousTensorSpec(
+                    (1, observation_dim), device=self.device
+                ),
+                "camera_rgb": UnboundedContinuousTensorSpec(
+                    (1, 3, height, width),
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
+                "intrinsics": self.drone.intrinsics_spec.unsqueeze(0).to(self.device),
             })
         }).expand(self.num_envs).to(self.device)
         self.action_spec = CompositeSpec({
@@ -200,10 +243,28 @@ class Hover(IsaacEnv):
             obs.append(t.expand(-1, self.time_encoding_dim).unsqueeze(1))
         obs = torch.cat(obs, dim=-1)
 
+        images = self.camera.get_images()
+        rgb = images["rgb"]
+        # Replicator commonly returns RGBA. Keep RGB only.
+        rgb = rgb[:, :3]
+        rgb = rgb.to(dtype=torch.float32).div_(255.0)
+        # Shape: [num_envs, one_agent, 3, height, width]
+        rgb = rgb.unsqueeze(1)
+        expected = (
+            self.num_envs, 1, 3,
+            self.cfg.task.camera.resolution[1],
+            self.cfg.task.camera.resolution[0],
+        )
+        if tuple(rgb.shape) != expected:
+            raise RuntimeError(
+                f"Unexpected RGB shape {tuple(rgb.shape)}; expected {expected}"
+            )
+
         return TensorDict(
             {
                 "agents": {
                     "observation": obs,
+                    "camera_rgb": rgb,
                     "intrinsics": self.drone.intrinsics,
                 },
                 "stats": self.stats.clone(),

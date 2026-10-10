@@ -5,7 +5,7 @@ hydra:
     - file://../cfg
 
 headless: true
-enable_livestream: false
+enable_livestream: true
 mode: train
 
 sim: ${task.sim}
@@ -26,14 +26,17 @@ wandb:
   group: ${oc.select:..task.name}
   run_name: ${oc.select:..task.name,test}-${oc.select:..algo.name,none}-${oc.select:..task.drone_model.name,none}
   job_type: train
-  entity: your_wandb_entity_here
+  entity: ajneb-none
   project: marine_gym
-  mode: offline # set to 'offline' when debugging locally
+  mode: online # set to 'offline' when debugging locally
   run_id:
   monitor_gym: True
   tags:
 
 defaults:
-  - task: HoverRand
+  - task: Track
   - algo: ppo
   - _self_
+  
+  
+checkpoint_path: null

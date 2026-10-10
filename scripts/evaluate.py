@@ -86,7 +86,7 @@ def main(cfg):
     OmegaConf.set_struct(cfg, False)
     simulation_app = init_simulation_app(cfg)
     print(OmegaConf.to_yaml(cfg))
-    policy, env = load_checkpoint(hover_lauv_pure, cfg, cfg.algo)
+    policy, env = load_checkpoint(cfg.checkpoint_path, cfg, cfg.algo)
     eval_results = evaluate_model(env, policy, num_episodes=100, cfg=cfg)
     print(eval_results)
 

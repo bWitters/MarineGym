@@ -80,6 +80,22 @@ class Actor(nn.Module):
         scale = torch.exp(self.actor_std).expand_as(loc)
         return loc, scale
 
+class VisualEncoder(nn.Module):
+    def __init__(self, output_dim=128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=8, stride=4), nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2), nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.ReLU(),
+            nn.Flatten(),
+            nn.LazyLinear(output_dim), nn.ReLU(),
+        )
+
+    def forward(self, image):
+        leading = image.shape[:-3]
+        image = image.reshape(-1, *image.shape[-3:])
+        feature = self.net(image)
+        return feature.reshape(*leading, -1)
 
 class PPOPolicy(TensorDictModuleBase):
 
@@ -106,16 +122,22 @@ class PPOPolicy(TensorDictModuleBase):
         if self.cfg.priv_actor:
             intrinsics_dim = observation_spec[("agents", "intrinsics")].shape[-1]
             actor_module = TensorDictSequential(
-                TensorDictModule(make_mlp([128, 128]), [("agents", "observation")], ["feature"]),
                 TensorDictModule(
-                    nn.Sequential(nn.LayerNorm(intrinsics_dim), make_mlp([64, 64])),
-                    [("agents", "intrinsics")], ["context"]
+                    make_mlp([128, 128]),
+                    [("agents", "observation")], ["state_feature"],
                 ),
-                CatTensors(["feature", "context"], "feature"),
+                TensorDictModule(
+                    VisualEncoder(128),
+                    [("agents", "camera_rgb")], ["image_feature"],
+                ),
+                CatTensors(
+                    ["state_feature", "image_feature"],
+                    out_key="feature",
+                ),
                 TensorDictModule(
                     nn.Sequential(make_mlp([256, 256]), Actor(self.action_dim)),
-                    ["feature"], ["loc", "scale"]
-                )
+                    ["feature"], ["loc", "scale"],
+                ),
             )
         else:
             actor_module=TensorDictModule(

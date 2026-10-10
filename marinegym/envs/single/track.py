@@ -95,7 +95,7 @@ class Track(IsaacEnv):
         )
         from marinegym.robots.robot import ASSET_PATH
         import omni.isaac.core.utils.stage as stage_utils
-        stage_utils.add_reference_to_stage(usd_path= ASSET_PATH + "/usd/worlds/EmptyMarine.usd",prim_path="/World/defaultGroundPlane")
+        stage_utils.add_reference_to_stage(usd_path= ASSET_PATH + "/usd/worlds/test1.usdc",prim_path="/World/defaultGroundPlane")
 
 
         drone_prim = self.drone.spawn(translations=[(0.0, 0.0, 2.0)])[0]
