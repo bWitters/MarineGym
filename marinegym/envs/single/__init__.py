@@ -23,3 +23,4 @@
 
 from .hover import Hover
 from .track import Track
+from .search_and_rescue import SearchAndRescue

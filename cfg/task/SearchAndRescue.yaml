@@ -1,3 +1,4 @@
+# /workspace/github__bWitters__MarineGym/cfg/task/SearchAndRescue.yaml
 name: SearchAndRescue
 
 defaults:
@@ -18,21 +19,9 @@ drone_model:
 force_sensor: false
 time_encoding: true
 
-# Exploration parameters
-exploration:
-  enabled: true
-  drone_radius: 0.5
-  frontier_threshold: 0.5
-  max_frontiers: 10
+reward_effort_weight: 0.1
+reward_action_smoothness_weight: 0.0
 
-# SLAM parameters
-slam:
-  enabled: true
-  map_size: [200, 200]  # 20m x 20m for larger exploration
-  resolution: 0.1
-  n_channels: 32
-
-# Camera
 camera:
   enabled: true
   resolution: [84, 84]
@@ -42,7 +31,3 @@ camera:
   focal_length: 24.0
   horizontal_aperture: 20.955
   clipping_range: [0.1, 20.0]
-
-reward_effort_weight: 0.1
-reward_action_smoothness_weight: 0.0
-reward_distance_scale: 1.2
