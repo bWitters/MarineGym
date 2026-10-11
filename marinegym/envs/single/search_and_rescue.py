@@ -22,11 +22,7 @@ class SearchAndRescue(IsaacEnv):
         self.reward_action_smoothness_weight = cfg.task.reward_action_smoothness_weight
         self.time_encoding = cfg.task.get("time_encoding", False)
         self.mode = cfg.mode
-
-        super().__init__(cfg, headless)
-
-        self.drone.initialize()
-        if self.cfg.task.camera.enabled:
+        if cfg.task.camera.enabled:
             self.camera = Camera(
                 PinholeCameraCfg(
                     sensor_tick=0.0,
@@ -50,6 +46,10 @@ class SearchAndRescue(IsaacEnv):
                     f"Expected {self.num_envs} cameras, found {self.camera.count}"
                 )
 
+        super().__init__(cfg, headless)
+
+        self.drone.initialize()
+        
         self.init_poses = self.drone.get_world_poses(clone=True)
         self.init_vels = torch.zeros_like(self.drone.get_velocities())
 
