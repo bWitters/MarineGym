@@ -27,7 +27,7 @@ action_transform: null
 camera:
   enabled: true
   resolution: [84, 84] # [width, height]
-  data_types: [rgb]
+  data_types: [rgb, distance_to_image_plane]
   translation: [0.20, 0.0, 0.03]
   target: [1.0, 0.0, 0.03] # local +X is the expected forward direction
   focal_length: 24.0

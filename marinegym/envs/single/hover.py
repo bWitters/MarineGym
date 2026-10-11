@@ -159,6 +159,11 @@ class Hover(IsaacEnv):
                     device=self.device,
                     dtype=torch.float32,
                 ),
+                "camera_depth": UnboundedContinuousTensorSpec(
+                    (1, 1, height, width),  # Depth is single channel
+                    device=self.device,
+                    dtype=torch.float32,
+                ),
                 "intrinsics": self.drone.intrinsics_spec.unsqueeze(0).to(self.device),
             })
         }).expand(self.num_envs).to(self.device)
@@ -245,26 +250,40 @@ class Hover(IsaacEnv):
 
         images = self.camera.get_images()
         rgb = images["rgb"]
+        depth = images["distance_to_image_plane"]
+
         # Replicator commonly returns RGBA. Keep RGB only.
         rgb = rgb[:, :3]
         rgb = rgb.to(dtype=torch.float32).div_(255.0)
         # Shape: [num_envs, one_agent, 3, height, width]
         rgb = rgb.unsqueeze(1)
-        expected = (
+
+        depth = depth.unsqueeze(1)
+        print(depth)
+
+        expected_rgb = (
             self.num_envs, 1, 3,
             self.cfg.task.camera.resolution[1],
             self.cfg.task.camera.resolution[0],
         )
-        if tuple(rgb.shape) != expected:
-            raise RuntimeError(
-                f"Unexpected RGB shape {tuple(rgb.shape)}; expected {expected}"
-            )
+
+        expected_depth = (
+            self.num_envs, 1, 1,
+            self.cfg.task.camera.resolution[1],
+            self.cfg.task.camera.resolution[0],
+        )
+
+        if tuple(rgb.shape) != expected_rgb:
+            raise RuntimeError(f"Unexpected RGB shape {tuple(rgb.shape)}; expected {expected_rgb}")
+        if tuple(depth.shape) != expected_depth:
+            raise RuntimeError(f"Unexpected depth shape {tuple(depth.shape)}; expected {expected_depth}")
 
         return TensorDict(
             {
                 "agents": {
                     "observation": obs,
                     "camera_rgb": rgb,
+                    "camera_depth": depth,
                     "intrinsics": self.drone.intrinsics,
                 },
                 "stats": self.stats.clone(),
